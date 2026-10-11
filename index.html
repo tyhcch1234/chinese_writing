@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="描紅練習">
+<meta name="theme-color" content="#fdf6ec">
+<title>中文描紅練習</title>
+<style>
+  :root{
+    --ink:#2b2b2b;
+    --red:#e74c3c;
+    --paper:#fdf6ec;
+    --accent:#3b82f6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--paper); font-family:"PingFang TC","Noto Sans TC",sans-serif; color:#2b2b2b;}
+  body{display:flex; flex-direction:column; align-items:center; min-height:100vh; padding:12px 12px 24px;}
+  header{width:100%; max-width:640px; text-align:center; margin-bottom:8px;}
+  header h1{font-size:22px; margin:4px 0 2px;}
+  header .sub{font-size:14px; color:#888;}
+  .catBar{display:flex; gap:8px; overflow-x:auto; padding:4px 2px; width:100%; max-width:640px; -webkit-overflow-scrolling:touch;}
+  .catBar::-webkit-scrollbar{display:none;}
+  .catChip{flex:0 0 auto; border:none; border-radius:20px; padding:8px 14px; font-size:15px; background:#fff; color:#555; border:1px solid #e5e5e5; box-shadow:none; cursor:pointer;}
+  .catChip.active{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700;}
+  .charGrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(52px,1fr)); gap:8px; width:100%; max-width:640px; max-height:180px; overflow-y:auto; padding:8px; background:#fff; border-radius:12px; border:1px solid #eee; margin:8px 0 10px; -webkit-overflow-scrolling:touch;}
+  .charBtn{aspect-ratio:1/1; border:1px solid #eee; border-radius:10px; background:#fff; font-size:26px; color:#2b2b2b; font-family:"Kaiti TC","TW-Kai","STKaiti","KaiTi","DFKai-SB","Noto Serif TC",serif; padding:0; box-shadow:none; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .charBtn.active{background:#ffe9e6; border:2px solid var(--red); color:var(--red); font-weight:700;}
+  .stage{position:relative; width:100%; max-width:640px; aspect-ratio:1/1; touch-action:none; user-select:none; -webkit-user-select:none;}
+  canvas{position:absolute; inset:0; width:100%; height:100%; border-radius:12px;}
+  #gridCanvas{z-index:1;}
+  #inkCanvas{z-index:2;}
+  .pinyin{font-size:15px; color:#b0483c; margin-top:6px; text-align:center;}
+  .toolbar{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px; width:100%; max-width:640px;}
+  button{border:none; border-radius:14px; padding:12px 18px; font-size:16px; font-family:inherit; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08);}
+  .btn-primary{background:var(--accent); color:#fff; font-weight:700;}
+  .btn-red{background:var(--red); color:#fff;}
+  .btn-ghost{background:#fff; color:#444; border:1px solid #e5e5e5;}
+  .score{width:100%; max-width:640px; text-align:center; margin-top:12px; font-size:17px; min-height:24px; font-weight:600;}
+  .score.good{color:#16a34a;} .score.mid{color:#e67e22;} .score.low{color:var(--red);}
+</style>
+</head>
+<body>
+<header>
+  <h1>中文描紅練習</h1>
+  <div class="sub" id="progress">初小常用中文字 · 約 300 個</div>
+</header>
+
+<div class="catBar" id="catBar"></div>
+<div class="charGrid" id="charGrid"></div>
+
+<div class="stage">
+  <canvas id="gridCanvas"></canvas>
+  <canvas id="inkCanvas"></canvas>
+</div>
+<div class="pinyin" id="pinyin">粵拼：jat1</div>
+
+<div class="toolbar">
+  <button class="btn-ghost" id="prevBtn">上一個</button>
+  <button class="btn-red" id="clearBtn">清除</button>
+  <button class="btn-ghost" id="speakBtn">讀音</button>
+  <button class="btn-primary" id="checkBtn">檢查</button>
+  <button class="btn-ghost" id="nextBtn">下一個</button>
+</div>
+
+<div class="score" id="score"></div>
+
+<script>
+(function(){
+  const categories = [
+    {name:'數字', chars:[
+      {c:'一',p:'jat1'},{c:'二',p:'ji6'},{c:'三',p:'saam1'},{c:'四',p:'sei3'},{c:'五',p:'ng5'},
+      {c:'六',p:'luk6'},{c:'七',p:'cat1'},{c:'八',p:'baat3'},{c:'九',p:'gau2'},{c:'十',p:'sap6'},
+      {c:'百',p:'baak3'},{c:'千',p:'cin1'},{c:'萬',p:'maan6'},{c:'半',p:'bun3'},{c:'個',p:'go3'},
+      {c:'零',p:'ling4'},{c:'兩',p:'loeng5'},{c:'幾',p:'gei2'},{c:'多',p:'do1'},{c:'少',p:'siu2'}
+    ]},
+    {name:'人與家人', chars:[
+      {c:'人',p:'jan4'},{c:'我',p:'ngo5'},{c:'你',p:'nei5'},{c:'他',p:'taa1'},{c:'她',p:'taa1'},
+      {c:'爸',p:'baa1'},{c:'媽',p:'maa1'},{c:'哥',p:'go1'},{c:'弟',p:'dai6'},{c:'姐',p:'ze2'},
+      {c:'妹',p:'mui6'},{c:'兒',p:'ji4'},{c:'女',p:'neoi5'},{c:'男',p:'naam4'},{c:'師',p:'si1'},
+      {c:'生',p:'sang1'},{c:'朋',p:'pang4'},{c:'友',p:'jau5'},{c:'爺',p:'je4'},{c:'嫲',p:'maa4'},
+      {c:'婆',p:'po4'},{c:'公',p:'gung1'},{c:'伯',p:'baak3'},{c:'叔',p:'suk1'}
+    ]},
+    {name:'身體', chars:[
+      {c:'口',p:'hau2'},{c:'手',p:'sau2'},{c:'耳',p:'ji5'},{c:'眼',p:'ngaan5'},{c:'鼻',p:'bei6'},
+      {c:'心',p:'sam1'},{c:'足',p:'zuk1'},{c:'頭',p:'tau4'},{c:'身',p:'san1'},{c:'腳',p:'goek3'},
+      {c:'牙',p:'ngaa4'},{c:'嘴',p:'zeoi2'},{c:'面',p:'min6'},{c:'毛',p:'mou4'},{c:'目',p:'muk6'},
+      {c:'舌',p:'sit3'},{c:'肩',p:'gin1'},{c:'腿',p:'teoi2'},{c:'背',p:'bui3'},{c:'血',p:'hyut3'},
+      {c:'骨',p:'gwat1'},{c:'皮',p:'pei4'}
+    ]},
+    {name:'動物', chars:[
+      {c:'狗',p:'gau2'},{c:'貓',p:'maau1'},{c:'雞',p:'gai1'},{c:'牛',p:'ngau4'},{c:'馬',p:'maa5'},
+      {c:'羊',p:'joeng4'},{c:'魚',p:'jyu4'},{c:'鳥',p:'niu5'},{c:'蟲',p:'cung4'},{c:'兔',p:'tou3'},
+      {c:'龍',p:'lung4'},{c:'虎',p:'fu2'},{c:'豬',p:'zyu1'},{c:'鴨',p:'aap3'},{c:'象',p:'zoeng6'},
+      {c:'猴',p:'hau4'},{c:'蛇',p:'se4'},{c:'蛙',p:'waa1'},{c:'雀',p:'zoek3'},{c:'鵝',p:'ngo4'}
+    ]},
+    {name:'植物', chars:[
+      {c:'花',p:'faa1'},{c:'草',p:'cou2'},{c:'木',p:'muk6'},{c:'樹',p:'syu6'},{c:'葉',p:'jip6'},
+      {c:'果',p:'gwo2'},{c:'米',p:'mai5'},{c:'豆',p:'dau6'},{c:'竹',p:'zuk1'},{c:'菜',p:'coi3'},
+      {c:'瓜',p:'gwaa1'},{c:'苗',p:'miu4'},{c:'根',p:'gan1'},{c:'蘭',p:'laan4'},{c:'蓮',p:'lin4'},
+      {c:'松',p:'cung4'}
+    ]},
+    {name:'自然', chars:[
+      {c:'日',p:'jat6'},{c:'天',p:'tin1'},{c:'月',p:'jyut6'},{c:'山',p:'saan1'},{c:'水',p:'seoi2'},
+      {c:'火',p:'fo2'},{c:'土',p:'tou2'},{c:'風',p:'fung1'},{c:'雨',p:'jyu5'},{c:'雲',p:'wan4'},
+      {c:'星',p:'sing1'},{c:'雷',p:'leoi4'},{c:'電',p:'din6'},{c:'石',p:'sek6'},{c:'田',p:'tin4'},
+      {c:'沙',p:'saa1'},{c:'河',p:'ho4'},{c:'海',p:'hoi2'},{c:'光',p:'gwong1'},{c:'雪',p:'syut3'}
+    ]},
+    {name:'顏色與形狀', chars:[
+      {c:'紅',p:'hung4'},{c:'黃',p:'wong4'},{c:'藍',p:'laam4'},{c:'綠',p:'luk6'},{c:'白',p:'baak6'},
+      {c:'黑',p:'hak1'},{c:'灰',p:'fui1'},{c:'紫',p:'zi2'},{c:'粉',p:'fan2'},{c:'金',p:'gam1'},
+      {c:'銀',p:'ngan4'},{c:'方',p:'fong1'},{c:'圓',p:'jyun4'},{c:'長',p:'coeng4'},{c:'短',p:'dyun2'},
+      {c:'大',p:'daai6'},{c:'小',p:'siu2'},{c:'高',p:'gou1'}
+    ]},
+    {name:'方向與位置', chars:[
+      {c:'上',p:'soeng6'},{c:'下',p:'haa6'},{c:'左',p:'zo2'},{c:'右',p:'jau6'},{c:'前',p:'cin4'},
+      {c:'後',p:'hau6'},{c:'中',p:'zung1'},{c:'東',p:'dung1'},{c:'南',p:'naam4'},{c:'西',p:'sai1'},
+      {c:'北',p:'bak1'},{c:'內',p:'noi6'},{c:'外',p:'ngoi6'},{c:'旁',p:'pong4'},{c:'邊',p:'bin1'},
+      {c:'直',p:'zik6'},{c:'近',p:'kan5'},{c:'遠',p:'jyun5'}
+    ]},
+    {name:'動作', chars:[
+      {c:'食',p:'sik6'},{c:'飲',p:'jam2'},{c:'看',p:'hon3'},{c:'聽',p:'ting1'},{c:'說',p:'syut3'},
+      {c:'話',p:'waa6'},{c:'走',p:'zau2'},{c:'跑',p:'paau2'},{c:'坐',p:'co5'},{c:'站',p:'zaam6'},
+      {c:'寫',p:'se2'},{c:'讀',p:'duk6'},{c:'唱',p:'coeng3'},{c:'跳',p:'tiu3'},{c:'笑',p:'siu3'},
+      {c:'哭',p:'huk1'},{c:'玩',p:'waan2'},{c:'打',p:'daa2'},{c:'拿',p:'naa4'},{c:'開',p:'hoi1'},
+      {c:'關',p:'gwaan1'},{c:'睡',p:'seoi6'},{c:'飛',p:'fei1'},{c:'行',p:'hang4'}
+    ]},
+    {name:'食物', chars:[
+      {c:'飯',p:'faan6'},{c:'麵',p:'min6'},{c:'粥',p:'zuk1'},{c:'蛋',p:'daan6'},{c:'包',p:'baau1'},
+      {c:'糖',p:'tong4'},{c:'茶',p:'caa4'},{c:'汁',p:'zap1'},{c:'菜',p:'coi3'},{c:'肉',p:'juk6'},
+      {c:'魚',p:'jyu4'},{c:'奶',p:'naai5'},{c:'湯',p:'tong1'},{c:'餅',p:'beng2'},{c:'糕',p:'gou1'},
+      {c:'蕉',p:'ziu1'}
+    ]},
+    {name:'學校', chars:[
+      {c:'學',p:'hok6'},{c:'校',p:'haau6'},{c:'書',p:'syu1'},{c:'筆',p:'bat1'},{c:'紙',p:'zi2'},
+      {c:'字',p:'zi6'},{c:'詞',p:'ci4'},{c:'句',p:'geoi3'},{c:'圖',p:'tou4'},{c:'課',p:'fo3'},
+      {c:'堂',p:'tong4'},{c:'桌',p:'coek3'},{c:'椅',p:'ji2'},{c:'板',p:'baan2'},{c:'畫',p:'waak6'},
+      {c:'讀',p:'duk6'},{c:'寫',p:'se2'},{c:'師',p:'si1'},{c:'生',p:'sang1'},{c:'班',p:'baan1'}
+    ]},
+    {name:'形容詞', chars:[
+      {c:'大',p:'daai6'},{c:'小',p:'siu2'},{c:'高',p:'gou1'},{c:'低',p:'dai1'},{c:'長',p:'coeng4'},
+      {c:'短',p:'dyun2'},{c:'快',p:'faai3'},{c:'慢',p:'maan6'},{c:'新',p:'san1'},{c:'舊',p:'gau6'},
+      {c:'好',p:'hou2'},{c:'壞',p:'waai6'},{c:'冷',p:'laang5'},{c:'熱',p:'jit6'},{c:'明',p:'ming4'},
+      {c:'暗',p:'am3'},{c:'多',p:'do1'},{c:'少',p:'siu2'},{c:'肥',p:'fei4'},{c:'瘦',p:'sau3'}
+    ]},
+    {name:'時間', chars:[
+      {c:'年',p:'nin4'},{c:'月',p:'jyut6'},{c:'日',p:'jat6'},{c:'時',p:'si4'},{c:'分',p:'fan1'},
+      {c:'秒',p:'miu5'},{c:'早',p:'zou2'},{c:'晚',p:'maan5'},{c:'今',p:'gam1'},{c:'明',p:'ming4'},
+      {c:'昨',p:'zok6'},{c:'天',p:'tin1'},{c:'星',p:'sing1'},{c:'期',p:'kei4'},{c:'春',p:'ceon1'},
+      {c:'夏',p:'haa6'},{c:'秋',p:'cau1'},{c:'冬',p:'dung1'}
+    ]},
+    {name:'交通', chars:[
+      {c:'車',p:'ce1'},{c:'船',p:'syun4'},{c:'飛',p:'fei1'},{c:'機',p:'gei1'},{c:'火',p:'fo2'},
+      {c:'巴',p:'baa1'},{c:'士',p:'si6'},{c:'單',p:'daan1'},{c:'路',p:'lou6'},{c:'橋',p:'kiu4'},
+      {c:'站',p:'zaam6'},{c:'輪',p:'leon4'}
+    ]},
+    {name:'衣物', chars:[
+      {c:'衣',p:'ji1'},{c:'褲',p:'fu3'},{c:'裙',p:'kwan4'},{c:'鞋',p:'haai4'},{c:'帽',p:'mou6'},
+      {c:'衫',p:'saam1'},{c:'襪',p:'mat6'},{c:'帶',p:'daai3'},{c:'扣',p:'kau3'},{c:'巾',p:'gan1'}
+    ]},
+    {name:'家居', chars:[
+      {c:'家',p:'gaa1'},{c:'門',p:'mun4'},{c:'窗',p:'coeng1'},{c:'床',p:'cong4'},{c:'桌',p:'coek3'},
+      {c:'椅',p:'ji2'},{c:'燈',p:'dang1'},{c:'房',p:'fong2'},{c:'樓',p:'lau4'},{c:'屋',p:'uk1'},
+      {c:'牆',p:'coeng4'},{c:'梯',p:'tai1'},{c:'櫃',p:'gwai6'},{c:'鐘',p:'zung1'}
+    ]},
+    {name:'感覺與心情', chars:[
+      {c:'愛',p:'oi3'},{c:'樂',p:'lok6'},{c:'怕',p:'paa3'},{c:'驚',p:'ging1'},{c:'怒',p:'nou6'},
+      {c:'哭',p:'huk1'},{c:'笑',p:'siu3'},{c:'想',p:'soeng2'},{c:'喜',p:'hei2'},{c:'悲',p:'bei1'},
+      {c:'煩',p:'faan4'},{c:'累',p:'leoi6'}
+    ]},
+    {name:'常用字', chars:[
+      {c:'是',p:'si6'},{c:'有',p:'jau5'},{c:'在',p:'zoi6'},{c:'和',p:'wo4'},{c:'的',p:'dik1'},
+      {c:'了',p:'liu5'},{c:'不',p:'bat1'},{c:'沒',p:'mut6'},{c:'很',p:'han2'},{c:'都',p:'dou1'},
+      {c:'會',p:'wui5'},{c:'要',p:'jiu3'},{c:'去',p:'heoi3'},{c:'來',p:'loi4'},{c:'可',p:'ho2'},
+      {c:'以',p:'ji5'},{c:'也',p:'jaa5'},{c:'就',p:'zau6'},{c:'這',p:'ze2'},{c:'那',p:'naa5'},
+      {c:'做',p:'zou6'},{c:'給',p:'kap1'},{c:'用',p:'jung6'}
+    ]}
+  ];
+
+  const SIZE = 720;
+  const FONT = 'bold 430px "Kaiti TC","TW-Kai","STKaiti","KaiTi","DFKai-SB","Noto Serif TC","PingFang TC",serif';
+  const PEN = '#2b2b2b';
+  const PEN_WIDTH = 22;
+  let catIdx = 0;
+  let charIdx = 0;
+  let templateMask = null;
+
+  const curList = () => categories[catIdx].chars;
+  const curChar = () => curList()[charIdx];
+
+  const gridCanvas = document.getElementById('gridCanvas');
+  const inkCanvas = document.getElementById('inkCanvas');
+  gridCanvas.width = SIZE; gridCanvas.height = SIZE;
+  inkCanvas.width = SIZE; inkCanvas.height = SIZE;
+  const gctx = gridCanvas.getContext('2d');
+  const ictx = inkCanvas.getContext('2d');
+
+  function drawGrid(){
+    gctx.clearRect(0,0,SIZE,SIZE);
+    gctx.fillStyle = '#fff'; gctx.fillRect(0,0,SIZE,SIZE);
+    const m = 46;
+    gctx.strokeStyle = '#e74c3c'; gctx.lineWidth = 5;
+    gctx.strokeRect(m,m,SIZE-2*m,SIZE-2*m);
+    gctx.strokeStyle = 'rgba(231,76,60,0.42)'; gctx.lineWidth = 2;
+    gctx.setLineDash([10,9]);
+    gctx.beginPath();
+    gctx.moveTo(m,SIZE/2); gctx.lineTo(SIZE-m,SIZE/2);
+    gctx.moveTo(SIZE/2,m); gctx.lineTo(SIZE/2,SIZE-m);
+    gctx.stroke();
+    gctx.setLineDash([]);
+  }
+
+  function drawTemplate(){
+    drawGrid();
+    gctx.font = FONT;
+    gctx.textAlign = 'center'; gctx.textBaseline = 'middle';
+    gctx.fillStyle = 'rgba(231,76,60,0.30)';
+    gctx.fillText(curChar().c, SIZE/2, SIZE/2 + SIZE*0.015);
+  }
+
+  function buildTemplateMask(){
+    const off = document.createElement('canvas');
+    off.width = SIZE; off.height = SIZE;
+    const c = off.getContext('2d');
+    c.font = FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = '#000';
+    c.fillText(curChar().c, SIZE/2, SIZE/2 + SIZE*0.015);
+    const d = c.getImageData(0,0,SIZE,SIZE).data;
+    const mask = new Uint8Array(SIZE*SIZE);
+    for(let i=0;i<SIZE*SIZE;i++){ if(d[i*4+3]>40) mask[i]=1; }
+    return mask;
+  }
+
+  function renderChips(){
+    const bar = document.getElementById('catBar');
+    bar.innerHTML = '';
+    categories.forEach(function(cat,i){
+      const b = document.createElement('button');
+      b.className = 'catChip' + (i===catIdx ? ' active' : '');
+      b.textContent = cat.name;
+      b.onclick = function(){ loadChar(i, 0); };
+      bar.appendChild(b);
+    });
+  }
+
+  function renderGrid(){
+    const grid = document.getElementById('charGrid');
+    grid.innerHTML = '';
+    curList().forEach(function(ch, ci){
+      const b = document.createElement('button');
+      b.className = 'charBtn' + (ci===charIdx ? ' active' : '');
+      b.textContent = ch.c;
+      b.onclick = function(){ loadChar(catIdx, ci); };
+      grid.appendChild(b);
+    });
+  }
+
+  function loadChar(cat, ci){
+    catIdx = (cat + categories.length) % categories.length;
+    const list = curList();
+    charIdx = (ci + list.length) % list.length;
+    ictx.clearRect(0,0,SIZE,SIZE);
+    templateMask = buildTemplateMask();
+    drawTemplate();
+    document.getElementById('progress').textContent = '「' + categories[catIdx].name + '」第 ' + (charIdx+1) + ' / ' + list.length + ' 個字';
+    document.getElementById('pinyin').textContent = '粵拼：' + curChar().p;
+    const el = document.getElementById('score');
+    el.textContent = ''; el.className = 'score';
+    renderChips();
+    renderGrid();
+  }
+
+  function getPos(e){
+    const r = inkCanvas.getBoundingClientRect();
+    return { x:(e.clientX-r.left)*SIZE/r.width, y:(e.clientY-r.top)*SIZE/r.height };
+  }
+
+  let drawing = false, last = null;
+  inkCanvas.addEventListener('pointerdown', function(e){
+    e.preventDefault();
+    drawing = true; last = getPos(e);
+    ictx.fillStyle = PEN;
+    ictx.beginPath(); ictx.arc(last.x,last.y,PEN_WIDTH/2,0,Math.PI*2); ictx.fill();
+    if(inkCanvas.setPointerCapture) inkCanvas.setPointerCapture(e.pointerId);
+  });
+  inkCanvas.addEventListener('pointermove', function(e){
+    if(!drawing) return;
+    e.preventDefault();
+    const p = getPos(e);
+    ictx.strokeStyle = PEN; ictx.lineWidth = PEN_WIDTH;
+    ictx.lineCap = 'round'; ictx.lineJoin = 'round';
+    ictx.beginPath(); ictx.moveTo(last.x,last.y); ictx.lineTo(p.x,p.y); ictx.stroke();
+    last = p;
+  });
+  function stopDraw(){ drawing = false; last = null; }
+  inkCanvas.addEventListener('pointerup', stopDraw);
+  inkCanvas.addEventListener('pointercancel', stopDraw);
+
+  function dilate(mask, r){
+    const out = new Uint8Array(SIZE*SIZE);
+    for(let y=0;y<SIZE;y++){
+      const row = y*SIZE;
+      for(let x=0;x<SIZE;x++){
+        if(!mask[row+x]) continue;
+        const y0 = Math.max(0,y-r), y1 = Math.min(SIZE-1,y+r);
+        const x0 = Math.max(0,x-r), x1 = Math.min(SIZE-1,x+r);
+        for(let yy=y0;yy<=y1;yy++){
+          const orow = yy*SIZE;
+          for(let xx=x0;xx<=x1;xx++) out[orow+xx] = 1;
+        }
+      }
+    }
+    return out;
+  }
+
+  function speakText(text, rate){
+    if(!('speechSynthesis' in window)){ alert('你的裝置不支援語音'); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-HK'; u.rate = (rate == null ? 0.7 : rate);
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+
+  function speak(){ speakText(curChar().c); }
+
+  function speakPraise(){
+    speakText('波仔，叻仔，繼續努力！', 0.85);
+  }
+
+  function check(){
+    const d = ictx.getImageData(0,0,SIZE,SIZE).data;
+    const ink = new Uint8Array(SIZE*SIZE);
+    let inkCount = 0;
+    for(let i=0;i<SIZE*SIZE;i++){ if(d[i*4+3]>40){ ink[i]=1; inkCount++; } }
+    const el = document.getElementById('score');
+    if(!inkCount){ el.textContent = '還未寫字，先在格內描一描吧！'; el.className = 'score low'; return; }
+
+    const r = 14;
+    const inkNear = dilate(ink, r);
+    const tmpNear = dilate(templateMask, r);
+
+    let tCount = 0, covered = 0, inkOn = 0;
+    for(let i=0;i<SIZE*SIZE;i++){
+      if(templateMask[i]){ tCount++; if(inkNear[i]) covered++; }
+      if(ink[i] && tmpNear[i]) inkOn++;
+    }
+    const coverage = tCount ? covered/tCount : 0;
+    const precision = inkCount ? inkOn/inkCount : 0;
+    const score = Math.round((coverage*0.6 + precision*0.4)*100);
+
+    let msg;
+    if(score>=90){ msg = '寫得好好！'; el.className = 'score good'; }
+    else if(score>=70){ msg = '不錯，繼續加油！'; el.className = 'score good'; }
+    else if(score>=50){ msg = '加油，再寫一次！'; el.className = 'score mid'; }
+    else { msg = '再試一次，慢慢寫！'; el.className = 'score low'; }
+    el.textContent = msg + '（得分 ' + score + ' ／ 覆蓋 ' + Math.round(coverage*100) + '% · 準確 ' + Math.round(precision*100) + '%）';
+
+    if(score >= 70){ speakPraise(); }
+  }
+
+  document.getElementById('prevBtn').onclick = function(){ loadChar(catIdx, charIdx-1); };
+  document.getElementById('nextBtn').onclick = function(){ loadChar(catIdx, charIdx+1); };
+  document.getElementById('clearBtn').onclick = function(){
+    ictx.clearRect(0,0,SIZE,SIZE);
+    const el = document.getElementById('score');
+    el.textContent = ''; el.className = 'score';
+  };
+  document.getElementById('checkBtn').onclick = check;
+  document.getElementById('speakBtn').onclick = speak;
+
+  loadChar(0, 0);
+})();
+</script>
+</body>
+</html>
